@@ -44,7 +44,7 @@ if __name__ == '__main__':
     
     matches_file = 'data/set5/matches_' + datetime.now().strftime("%m%d_%H%M") +'.txt'
 
-    season5_date_string = '2021-04-28 11:00:00'
+    season5_date_string = '2021-04-28 20:00:00'
     season5_start_date = datetime.strptime(season5_date_string, '%Y-%m-%d %H:%M:%S')
     season5_start_timestamp = int(datetime.timestamp(season5_start_date) * 1000)
 
@@ -53,8 +53,14 @@ if __name__ == '__main__':
     with open(summoner_puuid_file, 'rb') as in_file:
         puuids = pickle.load(in_file)
 
-    match_ids = GetMatchIdsByList(puuids[2000:2000], 20)
+    match_ids = GetMatchIdsByList(puuids[:10000], 13)
     match_ids = sorted(list(set(match_ids)), reverse=True)
+
+    with open('data/match_ids.txt', 'wb') as out_file:
+        pickle.dump(match_ids, out_file)
+
+    with open('data/match_ids.txt', 'rb') as in_file:
+        match_ids = pickle.load(in_file)
 
     matches = GetMatchesByList(match_ids, season5_start_timestamp)
 
