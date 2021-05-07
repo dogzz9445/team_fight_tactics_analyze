@@ -17,7 +17,7 @@ class Participant(Base):
     champions = Column(String)
     traits = Column(String)
     match_id = Column(Integer, ForeignKey('matches.id'))
-    match = relationship('Match', back_populates='participants')
+    #match = relationship('Match', back_populates='participants')
 
     def __init__(self, gold_left, last_round, level, placement, players_eliminated, time_eliminated, total_damage_to_players, champions, match):
         self.gold_left = gold_left
