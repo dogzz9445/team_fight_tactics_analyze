@@ -1,10 +1,9 @@
 import os
-from os import path
 import json
 import requests
 from IPython.display import Image, display
 
-class TFTStaticDataManager:
+class StaticDataManager:
     
     def __init__(self):
         self.static_data_path = 'data/set5/latest/'
@@ -71,7 +70,7 @@ class TFTStaticDataManager:
         icon_file_name = (api_name + '_square.tft_set5.png').lower()
         local_file_path = (self.static_character_icon_path + api_name + '/hud/').lower()
         cdragon_url = (self.latest_character_url + api_name + '/hud/' + icon_file_name).lower()
-        if path.exists(local_file_path + icon_file_name):
+        if os.path.exists(local_file_path + icon_file_name):
             return Image(filename=local_file_path + icon_file_name)
         else:
             response = requests.get(cdragon_url)
