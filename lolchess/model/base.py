@@ -1,13 +1,16 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, scoped_session
 
-engine = create_engine('mysql://dmjang:dbpassword@localhost:5432/sqlalchemy-orm-tutorial')
-# use session_factory() to get a new Session
-_SessionFactory = sessionmaker(bind=engine)
+from ..secret.secret import MYSQL_PASSWORD
+
+engine = create_engine('mysql://dmjang:'+MYSQL_PASSWORD+'@tzfamily.duckdns.org:33306/lolchess', 
+                        pool_pre_ping=True,
+                        echo=True)
+_Session = scoped_session(sessionmaker(bind=engine))
 
 Base = declarative_base()
 
-def session_factory():
+def Session():
     Base.metadata.create_all(engine)
-    return _SessionFactory()
+    return _Session()
