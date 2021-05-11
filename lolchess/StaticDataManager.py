@@ -1,7 +1,6 @@
 import os
-import json
 import requests
-from IPython.display import Image, display
+from IPython.display import Image
 
 class StaticDataManager:
     
@@ -38,16 +37,19 @@ class StaticDataManager:
         if list_items:
             icon_url = (os.path.splitext(list_items[0]['icon'])[0] + '.png').lower()
             icon_path, icon_filename = os.path.split(icon_url)
-            if path.exists(self.static_data_path + icon_url):
+            if os.path.exists(self.static_data_path + icon_url):
                 return Image(filename=self.static_data_path + icon_url)
             else:
-                response = requests.get(self.latest_game_url + icon_url)
+                try:
+                    response = requests.get(self.latest_game_url + icon_url)
+                except requests.HTTPError as err:
+                    print(err)
+                    return None
                 if not os.path.exists(self.static_data_path + icon_path):
                     os.makedirs(self.static_data_path + icon_path)
                 with open(self.static_data_path + icon_url, 'wb') as out_file:
                     out_file.write(response.content)                
                 return Image(response.content)
-        return None
     
     #
     # 챔피온
@@ -73,11 +75,14 @@ class StaticDataManager:
         if os.path.exists(local_file_path + icon_file_name):
             return Image(filename=local_file_path + icon_file_name)
         else:
-            response = requests.get(cdragon_url)
+            try:
+                response = requests.get(cdragon_url)
+            except requests.HTTPError as err:
+                print(err)
+                return None
             if not os.path.exists(local_file_path):
                 os.makedirs(local_file_path)
             with open(local_file_path + icon_file_name, 'wb') as out_file:
                 out_file.write(response.content)                
             return Image(response.content)
-        return None
             
