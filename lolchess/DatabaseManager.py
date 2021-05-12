@@ -4,21 +4,26 @@ from sqlalchemy.schema import Column, ForeignKey
 from sqlalchemy.types import Integer, String
 
 from .model.base import Session, Base
+from .model.summoner import Summoner
 from .model.match import GameType, Match
 from .model.participant import Participant
 
 Session = Session
 Base = Base
+Summoner = Summoner
 GameType = GameType
 Match = Match
 Participant = Participant
 
 class DatabaseManager():
     def __init__(self):
-        pass
+        self.session = Session()
 
     def __del__(self):
         pass
+
+    def commit(self):
+        self.session.commit()
 
     def run(self):
         pass
