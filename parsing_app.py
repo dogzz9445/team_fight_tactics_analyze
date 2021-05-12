@@ -1,8 +1,15 @@
 from riotwatcher import TftWatcher, ApiError
+from DatabaseManager import *
 import secret
 import datetime
 
+from .lolchess.model.summoner import Summoner
+from .lolchess.model.match import Match
+
 class TFTParsingApp:
+    """
+    
+    """
 
     def __init__(self,
         RIOT_API_KEY,
@@ -15,6 +22,7 @@ class TFTParsingApp:
         self.default_start_timestamp = int(datetime.timestamp(self.default_start_datetime) * 1000)
         self.season5_start_datetime = datetime.strptime('2021-04-28 12:00:00', '%Y-%m-%d %H:%M:%S')
         self.season5_start_timestamp = int(datetime.timestamp(self.season5_start_datetime) * 1000)
+        self.db = DatabaseManager()
 
     # -------------------------------------------------------------------------------
     #
@@ -22,6 +30,9 @@ class TFTParsingApp:
     #
     # -------------------------------------------------------------------------------
     async def GetMatch(self, puuid: str, count: int = 20):
+        """
+        
+        """
         response = None
         try:
             response = await self.api.match.by_puuid(self.routing, str(puuid), 20)
@@ -35,6 +46,9 @@ class TFTParsingApp:
     #
     # -------------------------------------------------------------------------------
     def requestTopSummoners(self):
+        """
+        
+        """
         limit_top_summoners = 200
         try:
             challengers = self.api.league.challenger(self.platform)
@@ -66,38 +80,77 @@ class TFTParsingApp:
         }
 
     def requestPuuids(self, summoner_Ids):
+        """
+        
+        """
         summoners = []
         for summoner_id in summoner_Ids:
-            try:
-                response = self.api.summoner.by_id(self.paltform, summoner_id)
+            if self.db.session.query(exists().where(Summoner.summoner_id == summoner_id)).scalar():
+                summoner = self.db.session.query(Summoner).where(Summoner.summoner_id == summoner_id).first()
                 summoners.append({
-                    'summonerId' : summoner_id,
-                    'puuid' : response['puuid']
+                    'summonerId' : summoner.summoner_id,
+                    'puuid' : summoner.summoner_puuid
                 })
-            except ApiError as err:
-                print(err)
+            else:
+                try:
+                    response = self.api.summoner.by_id(self.paltform, summoner_id)
+                    summoners.append({
+                        'summonerId' : summoner_id,
+                        'puuid' : response['puuid']
+                    })
+                    summoner = Summoner(summoner_id=summoner_id, summoner_puuid=response['puuid'])
+                    self.db.session.add(summoner)
+                except ApiError as err:
+                    print(err)
+        self.db.commit()
         return summoners
 
-    def requestMatchIdsByList(self, list_puuids: list, count: int = 20):
+    def requestMatchIdsByList(self, list_puuids: list, count: int = 50):
+        """
+        
+        """
         local_match_ids = []
         for idx, puuid in enumerate(list_puuids):
             try:
-                response = self.api.match.by_puuid(self.routing, str(puuid), 20)
-                local_match_ids.append(response)
+                response = self.api.match.by_puuid(self.routing, str(puuid), count)
+                for match_id in response:
+                    region_match_id, number_match_id = match_id.split('_')
+                    if not self.db.session.query(exists().where(Match.match_str == int(number_match_id))).scalar():
+                        local_match_ids.append(match_id)
             except ApiError as err:
                 print(err)
             print('Get matches by puuids... (%5d/%5d)' % (idx, len(list_puuids)))
-        return local_match_ids
+        return sorted(list(set(local_match_ids)), reverse=True)
 
-    def GetMatchesByList(self, list_match_ids: list):
-        local_matches = []
+    def requestMatchesByList(self, list_match_ids: list):
+        """
+        
+        """
         for idx, match_id in enumerate(list_match_ids):
             try:
                 response = self.api.match.by_id(self.routing, match_id)
-                if (response['info']['game_datetime'] < self.season5_start_timestamp):
-                    break
-                local_matches.append(response)
+                if response['info']['game_datetime'] < self.season5_start_timestamp:
+                    region_match_id, number_match_id = response['metadata']['match_id'].split('_')
+
+                    # add match to db
+                    match = Match(
+                        match_region=region_match_id, 
+                        match_str=int(number_match_id),
+                        setnumber=str(response['info']['tft_set_number']),
+                        matched_at=int(response['info']['game_datetime']),
+                        gametype_id=response['info']['gametype'] )
+                    self.db.session.add(match)
+
+                    # add participant to db
+                    for 
+                    self.db.session.add(participant)
+
+                    self.db.commit()
             except ApiError as err:
                 print(err)
             print('Get matches by match ids... (%5d/%5d)' % (idx, len(list_match_ids)))
-        return local_matches
+
+class test_parsing_app:
+
+    def test_requestMatchesByList(self):
+        pass

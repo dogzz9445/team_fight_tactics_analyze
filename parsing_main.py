@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     # -------------------------------------------------------------------------------
     #
-    # Configuration 
+    # Initializing
     #
     # -------------------------------------------------------------------------------
     app = TFTParsingApp()
@@ -28,4 +28,8 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------------------
     while True:
         summoners = app.requestTopSummoners()
+        puuids = app.requestPuuids(summoners['standard'] + summoners['turbo'])
+        matchids = app.requestMatchIdsByList(puuids)
+        matches = app.requestMatchesByList(matchids)
+
         time.sleep(0.01)

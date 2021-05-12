@@ -8,13 +8,6 @@ from .model.summoner import Summoner
 from .model.match import GameType, Match
 from .model.participant import Participant
 
-Session = Session
-Base = Base
-Summoner = Summoner
-GameType = GameType
-Match = Match
-Participant = Participant
-
 class DatabaseManager():
     def __init__(self):
         self.session = Session()
