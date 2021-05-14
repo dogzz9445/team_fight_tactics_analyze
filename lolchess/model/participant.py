@@ -19,7 +19,18 @@ class Participant(Base):
     match_id = Column(Integer, ForeignKey('matches.id'))
     #match = relationship('Match', back_populates='participants')
 
-    def __init__(self, gold_left, last_round, level, placement, players_eliminated, time_eliminated, total_damage_to_players, champions, match):
+    def __init__(self, 
+        gold_left, 
+        last_round, 
+        level, 
+        placement, 
+        players_eliminated, 
+        time_eliminated, 
+        total_damage_to_players, 
+        champions, 
+        traits,
+        match_id,
+        ):
         self.gold_left = gold_left
         self.last_round = last_round
         self.level = level
@@ -28,4 +39,5 @@ class Participant(Base):
         self.time_eliminated = time_eliminated
         self.total_damage_to_players = total_damage_to_players
         self.champions = champions
-        self.match = match
+        self.tratis = traits
+        self.match_id = match_id

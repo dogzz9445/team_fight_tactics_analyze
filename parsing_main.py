@@ -33,3 +33,6 @@ if __name__ == '__main__':
         matches = app.requestMatchesByList(matchids)
 
         time.sleep(0.01)
+        
+        if datetime.datetime.now() > datetime.datetime(2021, 5, 15, 10, 0, 0):
+            break

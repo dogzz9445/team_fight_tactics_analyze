@@ -18,17 +18,15 @@ class Match(Base):
     __tablename__ = 'matches'
 
     id = Column(Integer, primary_key=True)
-    match_region = Column(Integer)
-    match_str = Column(Integer)
+    match_id = Column(String(14))
     setnumber = Column(Integer)
     matched_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.datetime.utcnow())
     gametype_id = Column(Integer, ForeignKey('gametype.id'))
     #gametype = relationship('GameType', back_populates='Match')
 
-    def __init__(self, match_region, match_str, setnumber, matched_at, gametpye_id):
-        self.match_region = match_region
-        self.match_str = match_str
+    def __init__(self, match_id, setnumber, matched_at, gametype_id):
+        self.match_id = match_id
         self.setnumber = setnumber
         self.matched_at = datetime.datetime.utcfromtimestamp(matched_at / 1000)
-        self.gametpye_id = gametpye_id
+        self.gametype_id = gametype_id

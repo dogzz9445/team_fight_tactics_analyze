@@ -1,10 +1,14 @@
 from riotwatcher import TftWatcher, ApiError
-from DatabaseManager import *
 import secret
-import datetime
+from datetime import datetime
+from lolchess.DatabaseManager import DatabaseManager
 
-from .lolchess.model.summoner import Summoner
-from .lolchess.model.match import Match
+from lolchess.model.summoner import Summoner
+from lolchess.model.match import GameType, Match
+from lolchess.model.participant import Participant
+
+from sqlalchemy import create_engine, exists
+
 
 class TFTParsingApp:
     """
@@ -12,7 +16,6 @@ class TFTParsingApp:
     """
 
     def __init__(self,
-        RIOT_API_KEY,
         platform = 'KR',
         routing = 'ASIA'):
         self.api = TftWatcher(api_key=secret.RIOT_API_KEY)
@@ -35,7 +38,7 @@ class TFTParsingApp:
         """
         response = None
         try:
-            response = await self.api.match.by_puuid(self.routing, str(puuid), 20)
+            response = await self.api.match.by_puuid(self.routing, str(puuid), 100)
         except ApiError as err:
             print(err)
         return response
@@ -61,7 +64,7 @@ class TFTParsingApp:
         masters = [summoner['summonerId'] for summoner in masters['entries']]
         standard = challengers + grandmasters + masters
         if len(standard) > limit_top_summoners:
-            standard = standard[0:200]
+            standard = standard[0:300]
 
         hot_turbo = []
         try:
@@ -93,7 +96,7 @@ class TFTParsingApp:
                 })
             else:
                 try:
-                    response = self.api.summoner.by_id(self.paltform, summoner_id)
+                    response = self.api.summoner.by_id(self.platform, summoner_id)
                     summoners.append({
                         'summonerId' : summoner_id,
                         'puuid' : response['puuid']
@@ -112,10 +115,9 @@ class TFTParsingApp:
         local_match_ids = []
         for idx, puuid in enumerate(list_puuids):
             try:
-                response = self.api.match.by_puuid(self.routing, str(puuid), count)
+                response = self.api.match.by_puuid(self.routing, str(puuid['puuid']), count)
                 for match_id in response:
-                    region_match_id, number_match_id = match_id.split('_')
-                    if not self.db.session.query(exists().where(Match.match_str == int(number_match_id))).scalar():
+                    if not self.db.session.query(exists().where(Match.match_id == match_id)).scalar():
                         local_match_ids.append(match_id)
             except ApiError as err:
                 print(err)
@@ -129,23 +131,40 @@ class TFTParsingApp:
         for idx, match_id in enumerate(list_match_ids):
             try:
                 response = self.api.match.by_id(self.routing, match_id)
-                if response['info']['game_datetime'] < self.season5_start_timestamp:
-                    region_match_id, number_match_id = response['metadata']['match_id'].split('_')
+                if response['info']['game_datetime'] > self.season5_start_timestamp:
+
+                    # FIXME:
+                    gametype_id = 0
+                    if response['info']['tft_game_type'] == 'standard':
+                        gametype_id = 2
+                    elif response['info']['tft_game_type'] == 'turbo':
+                        gametype_id = 1
 
                     # add match to db
                     match = Match(
-                        match_region=region_match_id, 
-                        match_str=int(number_match_id),
+                        match_id=response['metadata']['match_id'],
                         setnumber=str(response['info']['tft_set_number']),
                         matched_at=int(response['info']['game_datetime']),
-                        gametype_id=response['info']['gametype'] )
+                        gametype_id=gametype_id)
                     self.db.session.add(match)
 
                     # add participant to db
-                    for 
-                    self.db.session.add(participant)
-
+                    for participant in response['info']['participants']:
+                        model_participant = Participant(
+                            gold_left=int(participant['gold_left']), 
+                            last_round=int(participant['last_round']), 
+                            level=int(participant['level']), 
+                            placement=int(participant['placement']), 
+                            players_eliminated=int(participant['players_eliminated']), 
+                            time_eliminated=int(participant['time_eliminated']), 
+                            total_damage_to_players=participant['total_damage_to_players'], 
+                            champions=str(participant['units']), 
+                            traits=str(participant['traits']),
+                            match_id=match.id
+                        )
+                        self.db.session.add(model_participant)
                     self.db.commit()
+
             except ApiError as err:
                 print(err)
             print('Get matches by match ids... (%5d/%5d)' % (idx, len(list_match_ids)))
@@ -154,3 +173,19 @@ class test_parsing_app:
 
     def test_requestMatchesByList(self):
         pass
+
+
+if __name__ == '__main__':
+    
+    RIOT_API_KEY = secret.RIOT_API_KEY
+    tft_watcher = TftWatcher(api_key=RIOT_API_KEY)
+    region = 'KR'
+    region_match = 'ASIA'
+
+    app = TFTParsingApp()
+
+    result = tft_watcher.league.rated_ladders(region, 'RANKED_TFT_TURBO')
+    result = [x['summonerId'] for x in result[0:10]]
+    puuids = app.requestPuuids(result)
+    matchids = app.requestMatchIdsByList(puuids)
+    matches = app.requestMatchesByList(matchids)
