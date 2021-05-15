@@ -132,38 +132,40 @@ class TFTParsingApp:
             try:
                 response = self.api.match.by_id(self.routing, match_id)
                 if response['info']['game_datetime'] > self.season5_start_timestamp:
+                    if not self.db.session.query(exists().where(Match.match_id == response['metadata']['match_id'])).scalar():
+                        # FIXME:
+                        gametype_id = 0
+                        if response['info']['tft_game_type'] == 'standard':
+                            gametype_id = 2
+                        elif response['info']['tft_game_type'] == 'turbo':
+                            gametype_id = 1
 
-                    # FIXME:
-                    gametype_id = 0
-                    if response['info']['tft_game_type'] == 'standard':
-                        gametype_id = 2
-                    elif response['info']['tft_game_type'] == 'turbo':
-                        gametype_id = 1
+                        # add match to db
+                        match = Match(
+                            match_id=response['metadata']['match_id'],
+                            setnumber=str(response['info']['tft_set_number']),
+                            matched_at=int(response['info']['game_datetime']),
+                            gametype_id=gametype_id)
+                        self.db.session.add(match)
 
-                    # add match to db
-                    match = Match(
-                        match_id=response['metadata']['match_id'],
-                        setnumber=str(response['info']['tft_set_number']),
-                        matched_at=int(response['info']['game_datetime']),
-                        gametype_id=gametype_id)
-                    self.db.session.add(match)
-
-                    # add participant to db
-                    for participant in response['info']['participants']:
-                        model_participant = Participant(
-                            gold_left=int(participant['gold_left']), 
-                            last_round=int(participant['last_round']), 
-                            level=int(participant['level']), 
-                            placement=int(participant['placement']), 
-                            players_eliminated=int(participant['players_eliminated']), 
-                            time_eliminated=int(participant['time_eliminated']), 
-                            total_damage_to_players=participant['total_damage_to_players'], 
-                            champions=str(participant['units']), 
-                            traits=str(participant['traits']),
-                            match_id=match.id
-                        )
-                        self.db.session.add(model_participant)
-                    self.db.commit()
+                        if self.db.session.query(exists().where(Match.match_id == response['metadata']['match_id'])).scalar():
+                            match_id = self.db.session.query(Match).filter_by(match_id=response['metadata']['match_id']).first()
+                        
+                            # add participant to db
+                            for participant in response['info']['participants']:
+                                model_participant = Participant(
+                                    gold_left=int(participant['gold_left']), 
+                                    last_round=int(participant['last_round']), 
+                                    level=int(participant['level']), 
+                                    placement=int(participant['placement']), 
+                                    players_eliminated=int(participant['players_eliminated']), 
+                                    time_eliminated=int(participant['time_eliminated']), 
+                                    total_damage_to_players=int(participant['total_damage_to_players']), 
+                                    champions=str(participant['units']), 
+                                    traits=str(participant['traits']),
+                                    match_id=int(match.id))
+                                self.db.session.add(model_participant)
+                            self.db.commit()
 
             except ApiError as err:
                 print(err)
@@ -185,7 +187,7 @@ if __name__ == '__main__':
     app = TFTParsingApp()
 
     result = tft_watcher.league.rated_ladders(region, 'RANKED_TFT_TURBO')
-    result = [x['summonerId'] for x in result[0:10]]
+    result = [x['summonerId'] for x in result[0:2]]
     puuids = app.requestPuuids(result)
     matchids = app.requestMatchIdsByList(puuids)
     matches = app.requestMatchesByList(matchids)

@@ -34,5 +34,5 @@ if __name__ == '__main__':
 
         time.sleep(0.01)
         
-        if datetime.datetime.now() > datetime.datetime(2021, 5, 15, 10, 0, 0):
+        if datetime.now() > datetime(2021, 5, 16, 15, 0, 0):
             break
