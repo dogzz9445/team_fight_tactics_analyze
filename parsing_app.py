@@ -8,6 +8,7 @@ from lolchess.model.match import GameType, Match
 from lolchess.model.participant import Participant
 
 from sqlalchemy import create_engine, exists
+import time
 
 
 class TFTParsingApp:
@@ -105,6 +106,8 @@ class TFTParsingApp:
                     self.db.session.add(summoner)
                 except ApiError as err:
                     print(err)
+                except:
+                    time.sleep(30)
         self.db.commit()
         return summoners
 
