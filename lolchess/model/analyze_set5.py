@@ -4,7 +4,7 @@ from sqlalchemy.orm import relationship
 
 from .base import Base
 
-class Match(Base):
+class AnalyzeSet5(Base):
     __tablename__ = 'analyze_set5'
 
     id = Column(Integer, primary_key=True)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Numeric, Integer, ForeignKey, Text
+from sqlalchemy import Column, String, Numeric, Integer, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -16,6 +16,7 @@ class Participant(Base):
     total_damage_to_players = Column(Integer)
     traits = Column(Text)
     champions = Column(Text)
+    is_analyzed = Column(Boolean)
     match_id = Column(Integer, ForeignKey('matches.id'))
     #match = relationship('Match', back_populates='participants')
 
@@ -30,6 +31,7 @@ class Participant(Base):
         champions, 
         traits,
         match_id,
+        is_analyzed = False
         ):
         self.gold_left = gold_left
         self.last_round = last_round
@@ -41,3 +43,4 @@ class Participant(Base):
         self.champions = champions
         self.traits = traits
         self.match_id = match_id
+        self.is_analyzed = is_analyzed
