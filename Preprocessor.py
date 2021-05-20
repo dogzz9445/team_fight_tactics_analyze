@@ -21,11 +21,13 @@ class Preprocessor():
                     .join(Match) \
                     .filter(Participant.is_analyzed == False) \
                     .filter(Match.setnumber == 5).statement, self.db.session.bind)
+        
         df_preprocessing = df_read
         df_preprocessing, dropped_idx = self.preprocessing_trash_rows(df_preprocessing)
-        for idx in dropped_idx:
+        for idx in list(df_read.iloc[dropped_idx].id):
             if self.db.session.query(exists().where(Participant.id == idx)).scalar():
                 self.db.session.query(Participant).filter_by(id=idx).update({"is_analyzed": True})
+        self.db.session.commit()
 
         pre_idx = 0
         for idx in self.myRange(0, len(df_preprocessing), 10000):
@@ -75,7 +77,7 @@ class Preprocessor():
         df_p1.fillna(0, inplace=True)
         return df_p1
 
-    def myRange(start,end,step):
+    def myRange(self, start,end,step):
         i = start
         while i < end:
             yield i
