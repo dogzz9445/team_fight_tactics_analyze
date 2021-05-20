@@ -88,27 +88,27 @@ class TFTParsingApp:
         
         """
         summoners = []
-        for summoner_id in summoner_Ids:
-            if self.db.session.query(exists().where(Summoner.summoner_id == summoner_id)).scalar():
-                summoner = self.db.session.query(Summoner).where(Summoner.summoner_id == summoner_id).first()
-                summoners.append({
-                    'summonerId' : summoner.summoner_id,
-                    'puuid' : summoner.summoner_puuid
-                })
-            else:
-                try:
-                    response = self.api.summoner.by_id(self.platform, summoner_id)
+        try:
+            for summoner_id in summoner_Ids:
+                if self.db.session.query(exists().where(Summoner.summoner_id == summoner_id)).scalar():
+                    summoner = self.db.session.query(Summoner).where(Summoner.summoner_id == summoner_id).first()
                     summoners.append({
-                        'summonerId' : summoner_id,
-                        'puuid' : response['puuid']
+                        'summonerId' : summoner.summoner_id,
+                        'puuid' : summoner.summoner_puuid
                     })
-                    summoner = Summoner(summoner_id=summoner_id, summoner_puuid=response['puuid'])
-                    self.db.session.add(summoner)
-                except ApiError as err:
-                    print(err)
-                except:
-                    time.sleep(30)
-        self.db.commit()
+                else:
+                        response = self.api.summoner.by_id(self.platform, summoner_id)
+                        summoners.append({
+                            'summonerId' : summoner_id,
+                            'puuid' : response['puuid']
+                        })
+                        summoner = Summoner(summoner_id=summoner_id, summoner_puuid=response['puuid'])
+                        self.db.session.add(summoner)
+            self.db.commit()
+        except ApiError as err:
+            print(err)
+        except:
+            time.sleep(30)
         return summoners
 
     def requestMatchIdsByList(self, list_puuids: list, count: int = 50):
@@ -172,6 +172,8 @@ class TFTParsingApp:
 
             except ApiError as err:
                 print(err)
+            except:
+                time.sleep(30)
             print('Get matches by match ids... (%5d/%5d)' % (idx, len(list_match_ids)))
 
 class test_parsing_app:
