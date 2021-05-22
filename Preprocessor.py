@@ -7,7 +7,7 @@ from lolchess.model.analyze_set5 import AnalyzeSet5
 
 from lolchess.DatabaseManager import DatabaseManager
 
-from sqlalchemy import exists, and_, or_
+from sqlalchemy import exists
 
 from Configuration import *
 
@@ -21,6 +21,7 @@ class Preprocessor():
                     .join(Match) \
                     .filter(Participant.is_analyzed == False) \
                     .filter(Match.setnumber == 5).statement, self.db.session.bind)
+        print('data length: ' + str(len(df_read.index)))
         
         df_preprocessing = df_read
         df_preprocessing, dropped_idx = self.preprocessing_trash_rows(df_preprocessing)
