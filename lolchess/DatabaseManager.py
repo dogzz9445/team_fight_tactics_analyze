@@ -2,15 +2,25 @@ from sqlalchemy import create_engine, exists
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.schema import Column, ForeignKey
 from sqlalchemy.types import Integer, String
+from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy import create_engine
 
-from .model.base import Session, Base
+from .model.base import Base
 from .model.summoner import Summoner
 from .model.match import GameType, Match
 from .model.participant import Participant
 
+from .secret import *
+
+mysql_engine = create_engine('mysql+pymysql://dmjang:'+MYSQL_PASSWORD+'@tzfamily.duckdns.org:33306/lolchess', pool_pre_ping=True)
+mysql_session = scoped_session(sessionmaker(bind=mysql_engine))
+
+postgres_engine = create_engine('postgresql://postgres:'+POSTGRES_PASSWORD+'@database-tft.ce5q9qmucrjo.ap-northeast-2.rds.amazonaws.com:5432/postgres', pool_pre_ping=True)
+postgres_session = scoped_session(sessionmaker(bind=postgres_engine))
+
 class DatabaseManager():
     def __init__(self):
-        self.session = Session()
+        self.session = mysql_session
 
     def __del__(self):
         pass
@@ -20,15 +30,31 @@ class DatabaseManager():
 
     def run(self):
         pass
-        
+
+class PostgresDatabaseManager():
+    def __init__(self):
+        self.session = postgres_session
+
+    def __del__(self):
+        pass
+
+    def commit(self):
+        self.session.commit()
+
+    def run(self):
+        pass
 
 if __name__ == '__main__':
-    session = Session()
+    mysqlSession = mysql_session
+    print(mysqlSession.is_active)
+    postgresSession = postgres_session
+    print(postgresSession.is_active)
+
     #   INSERT
-    if not session.query(exists().where(GameType.gametype == 'test')).scalar():
-        gt = GameType(gametype = 'test')
-        session.add(gt)
-        session.commit()
+    # if not session.query(exists().where(GameType.gametype == 'test')).scalar():
+    #     gt = GameType(gametype = 'test')
+    #     session.add(gt)
+    #     session.commit()
 
     #   SELECT
     # if session.query(exists().where(Address.city == 'City WTF')).scalar():
@@ -56,6 +82,6 @@ if __name__ == '__main__':
     #     session.query(User).filter_by(email='test@example.net').delete()
     #     session.commit()
 
-    if session.query(exists().where(GameType.gametype == 'test')).scalar():
-        session.query(GameType).filter_by(gametype='test').delete()
-        session.commit()
+    # if session.query(exists().where(GameType.gametype == 'test')).scalar():
+    #     session.query(GameType).filter_by(gametype='test').delete()
+    #     session.commit()

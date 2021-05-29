@@ -10,7 +10,7 @@ from lolchess.model.match import GameType, Match
 from lolchess.model.participant import Participant
 from lolchess.model.analyze_set5 import AnalyzeSet5
 from lolchess.model.analyzed import Analyzed
-from lolchess.DatabaseManager import DatabaseManager
+from lolchess.DatabaseManager import DatabaseManager, PostgresDatabaseManager
 from lolchess.StaticDataManager import StaticDataManager
 
 from sqlalchemy import exists, and_, or_
@@ -26,6 +26,7 @@ class Analyzer:
     def __init__(self):
         self.tft_clustering_version = 1
         self.db_manager = DatabaseManager()
+        self.postgres_db_manager = PostgresDatabaseManager()
         self.staticdata_manager = StaticDataManager()
 
     def duration_datetime(self, start_time, end_time, period_delta):
@@ -252,7 +253,7 @@ class Analyzer:
             df_db_labels.loc[index_label, 'standard_daily_win_rate'] = str(standard_daily_win_rate)
             df_db_labels.loc[index_label, 'standard_daily_defence_rate'] = str(standard_daily_defence_rate)
 
-        result = {
+        result = [{
             'info' : {
                 'version': self.tft_clustering_version,
                 'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -260,7 +261,7 @@ class Analyzer:
                 'period': period_win_rate
             },
             'data' : df_db_labels.to_dict()
-        }
+        }]
         
         return result
         
@@ -275,12 +276,10 @@ def week_analyze_time_duration(start_date: datetime, end_date: datetime):
 if __name__ == '__main__':
     analyzer = Analyzer()
 
-    analyze_start_date = datetime(2021, 4, 29, 0, 0, 0)
-    analyze_end_date = datetime(2021, 5, 23, 0, 0, 0)
+    analyze_start_date = datetime(2021, 5, 27, 0, 0, 0)
+    analyze_end_date = datetime(2021, 5, 29, 0, 0, 0)
 
     for s_date, e_date in week_analyze_time_duration(analyze_start_date, analyze_end_date):
-        
-
         version = 1
         analyze_period = 6
         target_start_date = s_date
@@ -297,5 +296,5 @@ if __name__ == '__main__':
                         target_end_date=target_end_date,
                         target_date=target_date,
                         json_result=json_result)
-        analyzer.db_manager.session.add(ana)
-        analyzer.db_manager.session.commit()
+        analyzer.postgres_db_manager.session.add(ana)
+        analyzer.postgres_db_manager.session.commit()

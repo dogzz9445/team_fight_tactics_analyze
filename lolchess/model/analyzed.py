@@ -7,7 +7,7 @@ from datetime import datetime
 from .base import Base
 
 class Analyzed(Base):
-    __tablename__ = 'analyzed'
+    __tablename__ = 'common_analyzed'
 
     id = Column(Integer, primary_key=True)
     version = Column(Integer)
