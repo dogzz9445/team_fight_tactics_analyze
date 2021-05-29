@@ -43,21 +43,21 @@ class Analyzer:
     params:
         start_time -> datetime: 분석 시작 날짜 및 시간
         end_time -> datetime: 분석 끝 날짜 및 시간
-        period_win_rate -> int: hour 기본
+        i_period_win_rate -> int: hour 기본
     returns:
         result -> json: 
     '''
-    def cluster_tft_matches(self, start_time: datetime, end_time: datetime, period_win_rate: int):
+    def cluster_tft_matches(self, start_time: datetime, end_time: datetime, i_period_win_rate: int):
         df_match_info = pd.read_sql(self.db_manager.session.query(Match) \
                 .filter(Match.setnumber == 5) \
-                .filter(and_(Match.matched_at <= end_time, Match.matched_at >= start_time)).statement, \
+                .filter(and_(Match.matched_at <= end_time, Match.matched_at >= start_time)).limit(100).statement, \
             self.db_manager.session.bind)
         df_read = pd.read_sql(self.db_manager.session.query(AnalyzeSet5, Participant) \
                 .join(Participant) \
                 .join(Match) \
                 .filter(Participant.is_analyzed == True) \
                 .filter(Match.setnumber == 5) \
-                .filter(and_(Match.matched_at <= end_time, Match.matched_at >= start_time)).statement, \
+                .filter(and_(Match.matched_at <= end_time, Match.matched_at >= start_time)).limit(100).statement, \
             self.db_manager.session.bind)
         df_clustering = df_read.drop(['id', 
                                 'last_round', 
@@ -99,7 +99,7 @@ class Analyzer:
         df_read['label'] = pd.Series(db_labels, name='label')
         df_db_result['id'] = df_read['id']
         
-        period_timedelta = timedelta(hours=period_win_rate)
+        period_timedelta = timedelta(hours=i_period_win_rate)
         daily_timedelta = timedelta(days=1)
         json_champions = None
         json_traits = None
@@ -258,14 +258,35 @@ class Analyzer:
                 'version': self.tft_clustering_version,
                 'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'end_time': end_time.strftime('%Y-%m-%d %H:%M:%S'),
-                'period': period_win_rate
+                'period': i_period_win_rate,
+                'num_labels': db_n_clusters_
             },
-            'data' : df_db_labels.to_dict()
+            'data' : {
+                'label': df_db_labels['label'].to_list(),
+                'counts': df_db_labels['counts'].to_list(),
+                'traits': df_db_labels['traits'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'champions': df_db_labels['champions'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'centroid_x': df_db_labels['centroid_x'].to_list(),
+                'centroid_y': df_db_labels['centroid_y'].to_list(),
+                'centroid_z': df_db_labels['centroid_z'].to_list(),
+                'win_rate': df_db_labels['win_rate'].to_list(),
+                'defence_rate': df_db_labels['defence_rate'].to_list(),
+                'period_win_rate': df_db_labels['period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'period_defence_rate': df_db_labels['period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_period_win_rate': df_db_labels['turbo_period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_period_defence_rate': df_db_labels['turbo_period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_period_win_rate': df_db_labels['standard_period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_period_defence_rate': df_db_labels['standard_period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'daily_win_rate': df_db_labels['daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'daily_defence_rate': df_db_labels['daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_daily_win_rate': df_db_labels['turbo_daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_daily_defence_rate': df_db_labels['turbo_daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_daily_win_rate': df_db_labels['standard_daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_daily_defence_rate': df_db_labels['standard_daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+            }
         }]
         
         return result
-        
-        # TODO: result를 데이터베이스 JSON 형태로 저장
         
 def week_analyze_time_duration(start_date: datetime, end_date: datetime):
     analyze_date = start_date + timedelta(days=1)
@@ -290,6 +311,12 @@ if __name__ == '__main__':
 
         json_result = analyzer.cluster_tft_matches(s_date, e_date, 6)
         
+        # test
+        # print(json_result)
+        # print(json.loads(json_result))
+        # break
+
+        # product
         ana = Analyzed(version = version, 
                         analyze_period = analyze_period, 
                         target_start_date=target_start_date, 
