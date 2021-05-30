@@ -29,6 +29,14 @@ class Analyzer:
         self.postgres_db_manager = PostgresDatabaseManager()
         self.staticdata_manager = StaticDataManager()
 
+    '''
+    duration_datetime:
+        
+    params:
+        
+    returns:
+        
+    '''
     def duration_datetime(self, start_time, end_time, period_delta):
         previous_time = start_time
         current_time = start_time + period_delta
@@ -48,6 +56,19 @@ class Analyzer:
         result -> json: 
     '''
     def cluster_tft_matches(self, start_time: datetime, end_time: datetime, i_period_win_rate: int):
+        # ----------------------------------------------------
+        #
+        # Configuration
+        #
+        # ----------------------------------------------------
+        period_timedelta = timedelta(hours=i_period_win_rate)
+        daily_timedelta = timedelta(days=1)
+        
+        # ----------------------------------------------------
+        #
+        # Read match information by participants
+        #
+        # ----------------------------------------------------
         df_match_info = pd.read_sql(self.db_manager.session.query(Match) \
                 .filter(Match.setnumber == 5) \
                 .filter(and_(Match.matched_at <= end_time, Match.matched_at >= start_time)).limit(100).statement, \
@@ -59,6 +80,12 @@ class Analyzer:
                 .filter(Match.setnumber == 5) \
                 .filter(and_(Match.matched_at <= end_time, Match.matched_at >= start_time)).limit(100).statement, \
             self.db_manager.session.bind)
+
+        # ----------------------------------------------------
+        #
+        # Drop unused value for clustering
+        #
+        # ----------------------------------------------------
         df_clustering = df_read.drop(['id', 
                                 'last_round', 
                                 'level', 
@@ -73,88 +100,103 @@ class Analyzer:
                                 'participant_id', 
                                 'id_1', 
                                 'gold_left'], axis=1)
-        df_db = df_clustering
-        df_db = StandardScaler().fit_transform(df_db)
-        db_model = DBSCAN(eps=7.142, min_samples=30).fit(df_db)
-        X_db_fit_pca = PCA(n_components=3).fit_transform(df_db)
+        df_dbscan = df_clustering
 
-        # Compute DBSCAN
-        db_labels = db_model.labels_
+        # ----------------------------------------------------
+        #
+        # Cluster data
+        #
+        # ----------------------------------------------------
+        df_dbscan = StandardScaler().fit_transform(df_dbscan)
+        dbscan_model = DBSCAN(eps=7.142, min_samples=30).fit(df_dbscan)
+        X_db_fit_pca = PCA(n_components=3).fit_transform(df_dbscan)
 
-        # Number of clusters in labels, ignoring noise if present.
-        db_n_clusters_ = len(set(db_labels)) - (1 if -1 in db_labels else 0)
-        db_n_noise_ = list(db_labels).count(-1)
+        dbscan_labels = dbscan_model.labels_
+        dbscan_n_clusters_ = len(set(dbscan_labels)) - (1 if -1 in dbscan_labels else 0)
+        dbscan_n_noise_ = list(dbscan_labels).count(-1)
 
-        print('Estimated number of clusters: %d' % db_n_clusters_)
-        print('Estimated number of noise points: %d' % db_n_noise_)
+        print('Estimated number of clusters: %d' % dbscan_n_clusters_)
+        print('Estimated number of noise points: %d' % dbscan_n_noise_)
 
-        count_db_labels = []
-        unique, counts = np.unique(db_labels, return_counts=True)
+        count_dbscan_labels = []
+        unique, counts = np.unique(dbscan_labels, return_counts=True)
         for u, c in zip(unique, counts):
             print('label ' + str(u) + ": " + str(c))
-            count_db_labels.append(dict({'label': u, 'counts': c}))
+            count_dbscan_labels.append(dict({'label': u, 'counts': c}))
 
-        df_db_result = pd.DataFrame(X_db_fit_pca)
-        df_db_result['label'] = pd.Series(db_labels, name='label')
-        df_read['label'] = pd.Series(db_labels, name='label')
-        df_db_result['id'] = df_read['id']
+        df_dbscan_result = pd.DataFrame(X_db_fit_pca)
+        df_dbscan_result['label'] = pd.Series(dbscan_labels, name='label')
+        df_read['label'] = pd.Series(dbscan_labels, name='label')
+        df_dbscan_result['id'] = df_read['id']
         
-        period_timedelta = timedelta(hours=i_period_win_rate)
-        daily_timedelta = timedelta(days=1)
+        # ----------------------------------------------------
+        #
+        # Estimate results
+        #
+        # ----------------------------------------------------
         json_champions = None
         json_traits = None
-        df_db_labels = pd.DataFrame(count_db_labels)
+        df_dbscan_labels = pd.DataFrame(count_dbscan_labels)
         df_matchtime_gametype = pd.merge(df_read[['placement','match_id', 'label']], df_match_info[['id','matched_at', 'gametype_id']], how='left', left_on='match_id', right_on='id')
 
-        for dic in count_db_labels:
+        for dic in count_dbscan_labels:
             dic_label = dic['label']
             index_label = dic['label'] + 1
 
-            mean_result = df_db_result[df_db_result.label == dic_label].mean()
-            df_db_labels.loc[index_label, 'centroid_x'] = mean_result[0]
-            df_db_labels.loc[index_label, 'centroid_y'] = mean_result[1]
-            df_db_labels.loc[index_label, 'centroid_z'] = mean_result[2]
+            # ----------------------------------------------------
+            #
+            # Caculate centroid and distance from centroid
+            #
+            # ----------------------------------------------------
+            mean_result = df_dbscan_result[df_dbscan_result.label == dic_label].mean()
+            df_dbscan_labels.loc[index_label, 'centroid_x'] = mean_result[0]
+            df_dbscan_labels.loc[index_label, 'centroid_y'] = mean_result[1]
+            df_dbscan_labels.loc[index_label, 'centroid_z'] = mean_result[2]
 
-            cur_label = df_db_labels[df_db_labels.label == dic_label]
+            df_cur_label = df_dbscan_labels[df_dbscan_labels.label == dic_label]
+            df_cur_dbscan = df_dbscan_result[df_dbscan_result.label == dic_label]
             min_distance_id = -1
             min_distance_value = 1000
-            for idx, row in df_db_result[df_db_result.label == dic_label].iterrows():
-                if np.sum((np.array(cur_label[['centroid_x', 'centroid_y', 'centroid_z']]) - np.array(row[[0,1,2]])), axis=1) ** 2 < min_distance_value:
-                    min_distance_value = np.sum((np.array(cur_label[['centroid_x', 'centroid_y', 'centroid_z']]) - np.array(row[[0,1,2]])), axis=1) ** 2
+            
+            df_cur_dbscan['distance'] = np.sum((np.array(df_cur_label[['centroid_x', '']])))
+
+            for idx, row in df_dbscan_result[df_dbscan_result.label == dic_label].iterrows():
+                if np.sum((np.array(df_cur_label[['centroid_x', 'centroid_y', 'centroid_z']]) - np.array(row[[0,1,2]])), axis=1) ** 2 < min_distance_value:
+                    min_distance_value = np.sum((np.array(df_cur_label[['centroid_x', 'centroid_y', 'centroid_z']]) - np.array(row[[0,1,2]])), axis=1) ** 2
                     min_distance_id = idx
             if min_distance_id > -1:
                 json_champions = json.loads(df_read.loc[min_distance_id, "champions"].replace("'", '"'))
                 json_traits = json.loads(df_read.loc[min_distance_id, "traits"].replace("'", '"'))
                 names = [self.staticdata_manager.GetChampionKoreanName(champion['character_id']) for champion in json_champions]
-                df_db_labels.loc[index_label, 'champions'] = str(names)
+                df_dbscan_labels.loc[index_label, 'champions'] = str(names)
                 names.clear()
                 for trait in json_traits:
                     if trait['tier_current'] > 0:
                         names.append(self.staticdata_manager.GetTraitKoreanName(trait['name']))
-                df_db_labels.loc[index_label, 'traits'] = str(names)
+                df_dbscan_labels.loc[index_label, 'traits'] = str(names)
 
             if len(df_read[df_read.label == dic_label].index) == 0:
-                df_db_labels.loc[index_label, 'win_rate'] = 0.00
-                df_db_labels.loc[index_label, 'defence_rate'] = 0.00
+                df_dbscan_labels.loc[index_label, 'win_rate'] = 0.00
+                df_dbscan_labels.loc[index_label, 'defence_rate'] = 0.00
             else:
-                df_db_labels.loc[index_label, 'win_rate'] = round(len(df_read[(df_read.label == dic['label']) & 
+                df_dbscan_labels.loc[index_label, 'win_rate'] = round(len(df_read[(df_read.label == dic['label']) & 
                                                                               (df_read.placement == 1)].index) / 
                                                                   len(df_read[df_read.label == dic['label']].index) * 100, 2)
-                df_db_labels.loc[index_label, 'defence_rate'] = round(len(df_read[(df_read.label == dic['label']) & 
+                df_dbscan_labels.loc[index_label, 'defence_rate'] = round(len(df_read[(df_read.label == dic['label']) & 
                                                                                   (df_read.placement <= 4)].index) / 
                                                                       len(df_read[df_read.label == dic['label']].index) * 100, 2)
 
             if len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label)&
                                         (df_matchtime_gametype.gametype_id == 1)].index) == 0:
-                df_db_labels.loc[index_label, 'turbo_win_rate'] = 0.00
-                df_db_labels.loc[index_label, 'turbo_defence_rate'] = 0.00
+                df_dbscan_labels.loc[index_label, 'turbo_win_rate'] = 0.00
+                df_dbscan_labels.loc[index_label, 'turbo_defence_rate'] = 0.00
             else:
-                df_db_labels.loc[index_label, 'turbo_win_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
+                df_dbscan_labels.loc[index_label, 'turbo_win_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
                                                                                                 (df_matchtime_gametype.placement == 1) &
                                                                                                 (df_matchtime_gametype.gametype_id == 1)].index) /
                                                                         len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
                                                                                                 (df_matchtime_gametype.gametype_id == 1)].index) * 100, 2)
-                df_db_labels.loc[index_label, 'turbo_defence_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic['label']) & 
+                df_dbscan_labels.loc[index_label, 'turbo_defence_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic['label']) & 
                                                                                                     (df_matchtime_gametype.placement <= 4) &
                                                                                                     (df_matchtime_gametype.gametype_id == 1)].index) / 
                                                                             len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
@@ -162,15 +204,15 @@ class Analyzer:
 
             if len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label)&
                                         (df_matchtime_gametype.gametype_id == 2)].index) == 0:
-                df_db_labels.loc[index_label, 'standard_win_rate'] = 0.00
-                df_db_labels.loc[index_label, 'standard_defence_rate'] = 0.00
+                df_dbscan_labels.loc[index_label, 'standard_win_rate'] = 0.00
+                df_dbscan_labels.loc[index_label, 'standard_defence_rate'] = 0.00
             else:
-                df_db_labels.loc[index_label, 'standard_win_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
+                df_dbscan_labels.loc[index_label, 'standard_win_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
                                                                                                 (df_matchtime_gametype.placement == 1) &
                                                                                                 (df_matchtime_gametype.gametype_id == 2)].index) /
                                                                         len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
                                                                                                 (df_matchtime_gametype.gametype_id == 2)].index) * 100, 2)
-                df_db_labels.loc[index_label, 'standard_defence_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic['label']) & 
+                df_dbscan_labels.loc[index_label, 'standard_defence_rate'] = round(len(df_matchtime_gametype[(df_matchtime_gametype.label == dic['label']) & 
                                                                                                     (df_matchtime_gametype.placement <= 4) &
                                                                                                     (df_matchtime_gametype.gametype_id == 2)].index) / 
                                                                             len(df_matchtime_gametype[(df_matchtime_gametype.label == dic_label) &
@@ -240,18 +282,18 @@ class Analyzer:
                     standard_daily_win_rate.append(round(len(df_standard_matches[(df_standard_matches.placement == 1)].index) / len(df_standard_matches.index) * 100, 2))
                     standard_daily_defence_rate.append(round(len(df_standard_matches[(df_standard_matches.placement <= 4)].index) / len(df_standard_matches.index) * 100, 2))
 
-            df_db_labels.loc[index_label, 'period_win_rate'] = str(period_win_rate)
-            df_db_labels.loc[index_label, 'period_defence_rate'] = str(period_defence_rate)
-            df_db_labels.loc[index_label, 'turbo_period_win_rate'] = str(turbo_period_win_rate)
-            df_db_labels.loc[index_label, 'turbo_period_defence_rate'] = str(turbo_period_defence_rate)
-            df_db_labels.loc[index_label, 'standard_period_win_rate'] = str(standard_period_win_rate)
-            df_db_labels.loc[index_label, 'standard_period_defence_rate'] = str(standard_period_defence_rate)
-            df_db_labels.loc[index_label, 'daily_win_rate'] = str(daily_win_rate)
-            df_db_labels.loc[index_label, 'daily_defence_rate'] = str(daily_defence_rate)
-            df_db_labels.loc[index_label, 'turbo_daily_win_rate'] = str(turbo_daily_win_rate)
-            df_db_labels.loc[index_label, 'turbo_daily_defence_rate'] = str(turbo_daily_defence_rate)
-            df_db_labels.loc[index_label, 'standard_daily_win_rate'] = str(standard_daily_win_rate)
-            df_db_labels.loc[index_label, 'standard_daily_defence_rate'] = str(standard_daily_defence_rate)
+            df_dbscan_labels.loc[index_label, 'period_win_rate'] = str(period_win_rate)
+            df_dbscan_labels.loc[index_label, 'period_defence_rate'] = str(period_defence_rate)
+            df_dbscan_labels.loc[index_label, 'turbo_period_win_rate'] = str(turbo_period_win_rate)
+            df_dbscan_labels.loc[index_label, 'turbo_period_defence_rate'] = str(turbo_period_defence_rate)
+            df_dbscan_labels.loc[index_label, 'standard_period_win_rate'] = str(standard_period_win_rate)
+            df_dbscan_labels.loc[index_label, 'standard_period_defence_rate'] = str(standard_period_defence_rate)
+            df_dbscan_labels.loc[index_label, 'daily_win_rate'] = str(daily_win_rate)
+            df_dbscan_labels.loc[index_label, 'daily_defence_rate'] = str(daily_defence_rate)
+            df_dbscan_labels.loc[index_label, 'turbo_daily_win_rate'] = str(turbo_daily_win_rate)
+            df_dbscan_labels.loc[index_label, 'turbo_daily_defence_rate'] = str(turbo_daily_defence_rate)
+            df_dbscan_labels.loc[index_label, 'standard_daily_win_rate'] = str(standard_daily_win_rate)
+            df_dbscan_labels.loc[index_label, 'standard_daily_defence_rate'] = str(standard_daily_defence_rate)
 
         result = [{
             'info' : {
@@ -259,30 +301,30 @@ class Analyzer:
                 'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'end_time': end_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'period': i_period_win_rate,
-                'num_labels': db_n_clusters_
+                'num_labels': dbscan_n_clusters_
             },
             'data' : {
-                'label': df_db_labels['label'].to_list(),
-                'counts': df_db_labels['counts'].to_list(),
-                'traits': df_db_labels['traits'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'champions': df_db_labels['champions'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'centroid_x': df_db_labels['centroid_x'].to_list(),
-                'centroid_y': df_db_labels['centroid_y'].to_list(),
-                'centroid_z': df_db_labels['centroid_z'].to_list(),
-                'win_rate': df_db_labels['win_rate'].to_list(),
-                'defence_rate': df_db_labels['defence_rate'].to_list(),
-                'period_win_rate': df_db_labels['period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'period_defence_rate': df_db_labels['period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'turbo_period_win_rate': df_db_labels['turbo_period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'turbo_period_defence_rate': df_db_labels['turbo_period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'standard_period_win_rate': df_db_labels['standard_period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'standard_period_defence_rate': df_db_labels['standard_period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'daily_win_rate': df_db_labels['daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'daily_defence_rate': df_db_labels['daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'turbo_daily_win_rate': df_db_labels['turbo_daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'turbo_daily_defence_rate': df_db_labels['turbo_daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'standard_daily_win_rate': df_db_labels['standard_daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
-                'standard_daily_defence_rate': df_db_labels['standard_daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'label': df_dbscan_labels['label'].to_list(),
+                'counts': df_dbscan_labels['counts'].to_list(),
+                'traits': df_dbscan_labels['traits'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'champions': df_dbscan_labels['champions'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'centroid_x': df_dbscan_labels['centroid_x'].to_list(),
+                'centroid_y': df_dbscan_labels['centroid_y'].to_list(),
+                'centroid_z': df_dbscan_labels['centroid_z'].to_list(),
+                'win_rate': df_dbscan_labels['win_rate'].to_list(),
+                'defence_rate': df_dbscan_labels['defence_rate'].to_list(),
+                'period_win_rate': df_dbscan_labels['period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'period_defence_rate': df_dbscan_labels['period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_period_win_rate': df_dbscan_labels['turbo_period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_period_defence_rate': df_dbscan_labels['turbo_period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_period_win_rate': df_dbscan_labels['standard_period_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_period_defence_rate': df_dbscan_labels['standard_period_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'daily_win_rate': df_dbscan_labels['daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'daily_defence_rate': df_dbscan_labels['daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_daily_win_rate': df_dbscan_labels['turbo_daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'turbo_daily_defence_rate': df_dbscan_labels['turbo_daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_daily_win_rate': df_dbscan_labels['standard_daily_win_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
+                'standard_daily_defence_rate': df_dbscan_labels['standard_daily_defence_rate'].apply(lambda x: json.loads(x.replace("'", '"'))).to_list(),
             }
         }]
         
