@@ -4,4 +4,3 @@ secret.py
 .vscode/
 .ipynb_checkpoints/
 __pycache__/
-src/
